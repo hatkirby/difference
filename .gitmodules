@@ -7,3 +7,6 @@
 [submodule "vendor/curlcpp"]
 	path = vendor/curlcpp
 	url = https://github.com/JosephP91/curlcpp
+[submodule "vendor/yaml-cpp"]
+	path = vendor/yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp
