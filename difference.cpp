@@ -278,7 +278,7 @@ int main(int argc, char** argv)
     composite.draw(Magick::DrawableCompositeImage(width, 0, pic2));
     composite.font("@coolvetica.ttf");
     
-    double fontsize = rand() % 72 + 16;
+    double fontsize = 72;
     for (;;)
     {
       composite.fontPointsize(fontsize);
@@ -309,7 +309,8 @@ int main(int argc, char** argv)
     composite.fontTypeMetrics(ant2, &metric);
     int x2 = (width - 40 - metric.textWidth())/2+20+width;
     composite.strokeColor("white");
-    composite.strokeWidth(1);
+    composite.strokeWidth(2);
+    composite.antiAlias(false);
     composite.draw(Magick::DrawableText(x1, y, ant1));
     composite.draw(Magick::DrawableText(x2, y, ant2));
     
