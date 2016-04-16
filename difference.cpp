@@ -94,6 +94,11 @@ int main(int argc, char** argv)
     }
   }
   
+  // Accept string from Google Chrome
+  std::string accept = "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8";
+  curl::curl_header headers;
+  headers.add(accept);
+  
   std::cout << "Started!" << std::endl;
   for (;;)
   {
@@ -153,6 +158,8 @@ int main(int argc, char** argv)
       curl::curl_ios<std::ostringstream> img1ios(img1buf);
       curl::curl_easy img1handle(img1ios);
       std::string img1url = lstvec[curind];
+      
+      img1handle.add<CURLOPT_HTTPHEADER>(headers.get());
       img1handle.add<CURLOPT_URL>(img1url.c_str());
       img1handle.add<CURLOPT_CONNECTTIMEOUT>(30);
       
@@ -202,6 +209,8 @@ int main(int argc, char** argv)
       curl::curl_ios<std::ostringstream> img2ios(img2buf);
       curl::curl_easy img2handle(img2ios);
       std::string img2url = lstvec[curind];
+      
+      img2handle.add<CURLOPT_HTTPHEADER>(headers.get());
       img2handle.add<CURLOPT_URL>(img2url.c_str());
       img2handle.add<CURLOPT_CONNECTTIMEOUT>(30);
       
