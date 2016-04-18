@@ -36,6 +36,53 @@ std::string capitalize(std::string input)
   return result;
 }
 
+bool downloadImage(std::string url, curl::curl_header headers, Magick::Blob& img, Magick::Image& pic)
+{
+  // willyfogg.com is a thumbnail generator known to return 200 even if the target image no longer exists
+  if (url.find("willyfogg.com/thumb.php") != std::string::npos)
+  {
+    return false;
+  }
+  
+  std::ostringstream imgbuf;
+  curl::curl_ios<std::ostringstream> imgios(imgbuf);
+  curl::curl_easy imghandle(imgios);
+  
+  imghandle.add<CURLOPT_HTTPHEADER>(headers.get());
+  imghandle.add<CURLOPT_URL>(url.c_str());
+  imghandle.add<CURLOPT_CONNECTTIMEOUT>(30);
+  
+  try {
+    imghandle.perform();
+  } catch (curl::curl_easy_exception error) {
+    error.print_traceback();
+  
+    return false;
+  }
+
+  if (imghandle.get_info<CURLINFO_RESPONSE_CODE>().get() != 200)
+  {
+    return false;
+  }
+  
+  if (std::string(imghandle.get_info<CURLINFO_CONTENT_TYPE>().get()).substr(0, 6) != "image/")
+  {
+    return false;
+  }
+  
+  std::string imgstr = imgbuf.str();
+  img = Magick::Blob(imgstr.c_str(), imgstr.length());
+  pic.read(img);
+  if (pic.rows() == 0)
+  {
+    return false;
+  }
+  
+  std::cout << url << std::endl;
+  
+  return true;
+}
+
 int main(int argc, char** argv)
 {
   srand(time(NULL));
@@ -154,45 +201,11 @@ int main(int argc, char** argv)
     int curind = 0;
     for (; curind < lstvec.size(); curind++)
     {
-      std::ostringstream img1buf;
-      curl::curl_ios<std::ostringstream> img1ios(img1buf);
-      curl::curl_easy img1handle(img1ios);
-      std::string img1url = lstvec[curind];
-      
-      img1handle.add<CURLOPT_HTTPHEADER>(headers.get());
-      img1handle.add<CURLOPT_URL>(img1url.c_str());
-      img1handle.add<CURLOPT_CONNECTTIMEOUT>(30);
-      
-      try {
-        img1handle.perform();
-      } catch (curl::curl_easy_exception error) {
-        error.print_traceback();
-      
-        continue;
-      }
-    
-      if (img1handle.get_info<CURLINFO_RESPONSE_CODE>().get() != 200)
+      if (downloadImage(lstvec[curind], headers, img1, pic1))
       {
-        continue;
+        success = true;
+        break;
       }
-      
-      if (std::string(img1handle.get_info<CURLINFO_CONTENT_TYPE>().get()).substr(0, 6) != "image/")
-      {
-        continue;
-      }
-      
-      std::string img1str = img1buf.str();
-      img1 = Magick::Blob(img1str.c_str(), img1str.length());
-      pic1.read(img1);
-      if (pic1.rows() == 0)
-      {
-        continue;
-      }
-      
-      std::cout << img1url << std::endl;
-      success = true;
-      
-      break;
     }
     
     if (!success)
@@ -205,45 +218,11 @@ int main(int argc, char** argv)
     Magick::Image pic2;
     for (curind++; curind < lstvec.size(); curind++)
     {
-      std::ostringstream img2buf;
-      curl::curl_ios<std::ostringstream> img2ios(img2buf);
-      curl::curl_easy img2handle(img2ios);
-      std::string img2url = lstvec[curind];
-      
-      img2handle.add<CURLOPT_HTTPHEADER>(headers.get());
-      img2handle.add<CURLOPT_URL>(img2url.c_str());
-      img2handle.add<CURLOPT_CONNECTTIMEOUT>(30);
-      
-      try {
-        img2handle.perform();
-      } catch (curl::curl_easy_exception error) {
-        error.print_traceback();
-      
-        continue;
-      }
-    
-      if (img2handle.get_info<CURLINFO_RESPONSE_CODE>().get() != 200)
+      if (downloadImage(lstvec[curind], headers, img2, pic2))
       {
-        continue;
+        success = true;
+        break;
       }
-      
-      if (std::string(img2handle.get_info<CURLINFO_CONTENT_TYPE>().get()).substr(0, 6) != "image/")
-      {
-        continue;
-      }
-
-      std::string img2str = img2buf.str();
-      img2 = Magick::Blob(img2str.c_str(), img2str.length());
-      pic2.read(img2);
-      if (pic2.rows() == 0)
-      {
-        continue;
-      }
-      
-      std::cout << img2url << std::endl;
-      success = true;
-      
-      break;
     }
     
     if (!success)
