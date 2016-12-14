@@ -88,10 +88,18 @@ bool downloadImage(std::string url, curl::curl_header headers, Magick::Blob& img
 int main(int argc, char** argv)
 {
   Magick::InitializeMagick(nullptr);
-  
+
+  if (argc != 2)
+  {
+    std::cout << "usage: difference [configfile]" << std::endl;
+    return -1;
+  }
+
+  std::string configfile(argv[1]);
+  YAML::Node config = YAML::LoadFile(configfile);
+
   int delay = 60 * 60;
   
-  YAML::Node config = YAML::LoadFile("config.yml");
   twitter::auth auth;
   auth.setConsumerKey(config["consumer_key"].as<std::string>());
   auth.setConsumerSecret(config["consumer_secret"].as<std::string>());
@@ -103,7 +111,9 @@ int main(int argc, char** argv)
   std::random_device random_device;
   std::mt19937 random_engine{random_device()};
   
-  verbly::data database("data.sqlite3");
+  std::string fontfile = "@" + config["font"].as<std::string>();
+
+  verbly::data database(config["verbly_datafile"].as<std::string>());
   
   auto whitelist = database.nouns();
   whitelist.with_wnid(111530512); // Crops (plants)
@@ -264,7 +274,7 @@ int main(int argc, char** argv)
       Magick::Image composite(Magick::Geometry(width*2, height, 0, 0), "white");
       composite.draw(Magick::DrawableCompositeImage(0, 0, pic1));
       composite.draw(Magick::DrawableCompositeImage(width, 0, pic2));
-      composite.font("@coolvetica.ttf");
+      composite.font(fontfile);
     
       double fontsize = 72;
       for (;;)
