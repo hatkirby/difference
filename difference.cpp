@@ -136,6 +136,7 @@ verbly::word difference::getPicturedNoun() const
     || (verbly::notion::wnid == 102512053) // fish
     || (verbly::notion::wnid == 103575691) // instrument of execution
     || (verbly::notion::wnid == 103829563) // noose
+    || (verbly::notion::wnid == 103663910) // life support
       ;
 
   verbly::query<verbly::word> pictureQuery = database_->words(
