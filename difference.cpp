@@ -165,6 +165,8 @@ std::pair<Magick::Image, Magick::Image>
     curl::curl_easy lsthandle(lstios);
     std::string lsturl = pictured.getNotion().getImageNetUrl();
     lsthandle.add<CURLOPT_URL>(lsturl.c_str());
+    lsthandle.add<CURLOPT_CONNECTTIMEOUT>(30);
+    lsthandle.add<CURLOPT_TIMEOUT>(300);
 
     try
     {
@@ -277,6 +279,7 @@ Magick::Image difference::getImageAtUrl(std::string url) const
   imghandle.add<CURLOPT_HTTPHEADER>(headers.get());
   imghandle.add<CURLOPT_URL>(url.c_str());
   imghandle.add<CURLOPT_CONNECTTIMEOUT>(30);
+  imghandle.add<CURLOPT_TIMEOUT>(300);
 
   try
   {
