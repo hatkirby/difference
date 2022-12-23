@@ -5,4 +5,4 @@ difference is a Mastodon bot that generates false dichotomies. It finds some typ
 
 It tweets a new binary every hour. It uses [verbly](https://github.com/hatkirby/verbly) to pick nouns, pictures, and antonyms; [GraphicsMagick](http://www.graphicsmagick.org/) to create the output images; [YAMLcpp](https://github.com/jbeder/yaml-cpp) to read a configuration file; and [mastodonpp](https://github.com/tastytea/mastodonpp) to send the status updates to Mastodon.
 
-The canonical difference handle is [@difference@beppo.online](https://beppo.online/@difference) (previously [@differencebot](https://twitter.com/differencebot)).
+The canonical difference handle is [@difference@beppo.online](https://beppo.online/@difference) (previously [@differencebot](https://twitter.com/differencebot) on Twitter).
