@@ -7,8 +7,9 @@
 #include <utility>
 #include <verbly.h>
 #include <stdexcept>
-#include <twitter.h>
+#include <mastodonpp/mastodonpp.hpp>
 #include <memory>
+#include "imagenet.h"
 
 class difference {
 public:
@@ -26,8 +27,6 @@ private:
   std::pair<Magick::Image, Magick::Image>
     getImagesForNoun(verbly::word pictured) const;
 
-  Magick::Image getImageAtUrl(std::string url) const;
-
   std::pair<verbly::word, verbly::word> getOppositeIdentifiers() const;
 
   Magick::Image composeImage(
@@ -36,9 +35,9 @@ private:
     Magick::Image image2,
     verbly::word word2) const;
 
-  std::string generateTweetText(verbly::word word1, verbly::word word2) const;
+  std::string generatePostText(verbly::word word1, verbly::word word2) const;
 
-  void sendTweet(std::string text, Magick::Image image) const;
+  void sendPost(std::string text, Magick::Image image) const;
 
   class could_not_get_images : public std::runtime_error {
   public:
@@ -50,8 +49,11 @@ private:
 
   std::mt19937& rng_;
   std::unique_ptr<verbly::database> database_;
-  std::unique_ptr<twitter::client> client_;
+  std::unique_ptr<mastodonpp::Instance> instance_;
+  std::unique_ptr<mastodonpp::Connection> connection_;
+  std::unique_ptr<imagenet> imagenet_;
   std::string fontfile_;
+  std::string tempfile_;
 
 };
 

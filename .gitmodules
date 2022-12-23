@@ -1,6 +1,6 @@
 [submodule "vendor/verbly"]
 	path = vendor/verbly
 	url = https://github.com/hatkirby/verbly
-[submodule "vendor/libtwittercpp"]
-	path = vendor/libtwittercpp
-	url = https://github.com/hatkirby/libtwittercpp
+[submodule "vendor/curlcpp"]
+	path = vendor/curlcpp
+	url = https://github.com/JosephP91/curlcpp.git

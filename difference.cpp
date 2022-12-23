@@ -1,12 +1,14 @@
 #include "difference.h"
-#include <curl_easy.h>
-#include <curl_header.h>
 #include <vector>
 #include <iostream>
 #include <yaml-cpp/yaml.h>
 #include <chrono>
 #include <thread>
 #include <deque>
+#include <json.hpp>
+#include "imagenet.h"
+
+#define ENABLE_BOT
 
 difference::difference(
   std::string configFile,
@@ -16,20 +18,22 @@ difference::difference(
   // Load the config file.
   YAML::Node config = YAML::LoadFile(configFile);
 
-  // Set up the Twitter client.
-  twitter::auth auth;
-  auth.setConsumerKey(config["consumer_key"].as<std::string>());
-  auth.setConsumerSecret(config["consumer_secret"].as<std::string>());
-  auth.setAccessKey(config["access_key"].as<std::string>());
-  auth.setAccessSecret(config["access_secret"].as<std::string>());
-
-  client_ = std::unique_ptr<twitter::client>(new twitter::client(auth));
-
+#ifdef ENABLE_BOT
+  // Set up the Mastodon client.
+  instance_ = std::make_unique<mastodonpp::Instance>(
+    config["mastodon_instance"].as<std::string>(),
+    config["mastodon_token"].as<std::string>());
+  connection_ = std::make_unique<mastodonpp::Connection>(*instance_);
+#endif
+	
   // Set up the verbly database.
   database_ = std::unique_ptr<verbly::database>(
     new verbly::database(config["verbly_datafile"].as<std::string>()));
 
+  imagenet_ = std::make_unique<imagenet>(config["imagenet"].as<std::string>());
+
   fontfile_ = "@" + config["font"].as<std::string>();
+  tempfile_ = config["tempfile"].as<std::string>();
 }
 
 void difference::run() const
@@ -73,19 +77,19 @@ void difference::run() const
       // Generate the tweet text.
       std::cout << "Generating text..." << std::endl;
 
-      std::string text = generateTweetText(std::move(word1), std::move(word2));
+      std::string text = generatePostText(std::move(word1), std::move(word2));
 
-      std::cout << "Tweet text: " << text << std::endl;
+      std::cout << "Post text: " << text << std::endl;
 
-      // Send the tweet.
-      std::cout << "Sending tweet..." << std::endl;
+      // Send the post.
+      std::cout << "Sending post..." << std::endl;
 
-      sendTweet(std::move(text), std::move(image));
+      sendPost(std::move(text), std::move(image));
 
-      std::cout << "Tweeted!" << std::endl;
+      std::cout << "Posted!" << std::endl;
 
       // Wait.
-      std::this_thread::sleep_for(std::chrono::hours(1));
+      std::this_thread::sleep_for(std::chrono::hours(9));
     } catch (const could_not_get_images& ex)
     {
       std::cout << ex.what() << std::endl;
@@ -95,9 +99,9 @@ void difference::run() const
     } catch (const Magick::ErrorCorruptImage& ex)
     {
       std::cout << "Corrupt image: " << ex.what() << std::endl;
-    } catch (const twitter::twitter_error& ex)
+    } catch (const std::exception& ex)
     {
-      std::cout << "Twitter error: " << ex.what() << std::endl;
+      std::cout << "Other error: " << ex.what() << std::endl;
 
       std::this_thread::sleep_for(std::chrono::hours(1));
     }
@@ -153,175 +157,22 @@ verbly::word difference::getPicturedNoun() const
 std::pair<Magick::Image, Magick::Image>
   difference::getImagesForNoun(verbly::word pictured) const
 {
-  int backoff = 0;
-
   std::cout << "Getting URLs..." << std::endl;
 
-  std::string lstdata;
-  while (lstdata.empty())
-  {
-    std::ostringstream lstbuf;
-    curl::curl_ios<std::ostringstream> lstios(lstbuf);
-    curl::curl_easy lsthandle(lstios);
-    std::string lsturl = pictured.getNotion().getImageNetUrl();
-    lsthandle.add<CURLOPT_URL>(lsturl.c_str());
-    lsthandle.add<CURLOPT_CONNECTTIMEOUT>(30);
-    lsthandle.add<CURLOPT_TIMEOUT>(300);
+  std::vector<std::tuple<std::string, std::string>> images =
+    imagenet_->getImagesForNotion(pictured.getNotion().getId(), rng_, 2);
 
-    try
-    {
-      lsthandle.perform();
-    } catch (const curl::curl_easy_exception& e)
-    {
-      e.print_traceback();
+  const std::string& imgdata1 = std::get<0>(images[0]);
+  Magick::Blob image1(imgdata1.c_str(), imgdata1.length());
+  Magick::Image pic1;
+  pic1.read(image1);
 
-      backoff++;
-      std::cout << "Waiting for " << backoff << " seconds..." << std::endl;
+  const std::string& imgdata2 = std::get<0>(images[1]);
+  Magick::Blob image2(imgdata2.c_str(), imgdata2.length());
+  Magick::Image pic2;
+  pic2.read(image2);
 
-      std::this_thread::sleep_for(std::chrono::seconds(backoff));
-
-      continue;
-    }
-
-    backoff = 0;
-
-    if (lsthandle.get_info<CURLINFO_RESPONSE_CODE>().get() != 200)
-    {
-      throw could_not_get_images();
-    }
-
-    std::cout << "Got URLs." << std::endl;
-    lstdata = lstbuf.str();
-  }
-
-  std::vector<std::string> lstvec = verbly::split<std::vector<std::string>>(lstdata, "\r\n");
-  if (lstvec.size() < 2)
-  {
-    throw could_not_get_images();
-  }
-
-  std::shuffle(std::begin(lstvec), std::end(lstvec), rng_);
-
-  std::deque<std::string> urls;
-  for (std::string& url : lstvec)
-  {
-    urls.push_back(url);
-  }
-
-  Magick::Image image1;
-  bool success = false;
-  while (!urls.empty())
-  {
-    std::string url = urls.front();
-    urls.pop_front();
-
-    try
-    {
-      image1 = getImageAtUrl(url);
-
-      success = true;
-      break;
-    } catch (const could_not_get_images& ex)
-    {
-      // Just try the next one.
-    }
-  }
-
-  if (!success)
-  {
-    throw could_not_get_images();
-  }
-
-  Magick::Image image2;
-  success = false;
-  while (!urls.empty())
-  {
-    std::string url = urls.front();
-    urls.pop_front();
-
-    try
-    {
-      image2 = getImageAtUrl(url);
-
-      success = true;
-      break;
-    } catch (const could_not_get_images& ex)
-    {
-      // Just try the next one.
-    }
-  }
-
-  if (!success)
-  {
-    throw could_not_get_images();
-  }
-
-  return {std::move(image1), std::move(image2)};
-}
-
-Magick::Image difference::getImageAtUrl(std::string url) const
-{
-  // willyfogg.com is a thumbnail generator known to return 200 even if the target image no longer exists
-  if (url.find("willyfogg.com/thumb.php") != std::string::npos)
-  {
-    throw could_not_get_images();
-  }
-
-  // Accept string from Google Chrome
-  std::string accept = "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8";
-  curl::curl_header headers;
-  headers.add(accept);
-
-  std::ostringstream imgbuf;
-  curl::curl_ios<std::ostringstream> imgios(imgbuf);
-  curl::curl_easy imghandle(imgios);
-
-  imghandle.add<CURLOPT_HTTPHEADER>(headers.get());
-  imghandle.add<CURLOPT_URL>(url.c_str());
-  imghandle.add<CURLOPT_CONNECTTIMEOUT>(30);
-  imghandle.add<CURLOPT_TIMEOUT>(300);
-
-  try
-  {
-    imghandle.perform();
-  } catch (const curl::curl_easy_exception& error) {
-    error.print_traceback();
-
-    throw could_not_get_images();
-  }
-
-  if (imghandle.get_info<CURLINFO_RESPONSE_CODE>().get() != 200)
-  {
-    throw could_not_get_images();
-  }
-
-  std::string content_type = imghandle.get_info<CURLINFO_CONTENT_TYPE>().get();
-  if (content_type.substr(0, 6) != "image/")
-  {
-    throw could_not_get_images();
-  }
-
-  std::string imgstr = imgbuf.str();
-  Magick::Blob img(imgstr.c_str(), imgstr.length());
-  Magick::Image pic;
-
-  try
-  {
-    pic.read(img);
-
-    if ((pic.rows() > 0) && (pic.columns() >= 800))
-    {
-      std::cout << url << std::endl;
-    }
-  } catch (const Magick::ErrorOption& e)
-  {
-    // Occurs when the the data downloaded from the server is malformed
-    std::cout << "Magick: " << e.what() << std::endl;
-
-    throw could_not_get_images();
-  }
-
-  return pic;
+  return {std::move(pic1), std::move(pic2)};
 }
 
 std::pair<verbly::word, verbly::word> difference::getOppositeIdentifiers() const
@@ -419,7 +270,7 @@ Magick::Image difference::composeImage(
   return composite;
 }
 
-std::string difference::generateTweetText(
+std::string difference::generatePostText(
   verbly::word word1,
   verbly::word word2) const
 {
@@ -432,12 +283,44 @@ std::string difference::generateTweetText(
   return result.compile();
 }
 
-void difference::sendTweet(std::string text, Magick::Image image) const
+void difference::sendPost(std::string text, Magick::Image image) const
 {
-  Magick::Blob outputBlob;
   image.magick("png");
-  image.write(&outputBlob);
+  image.write(tempfile_);
 
-  long media_id = client_->uploadMedia("image/png", (const char*) outputBlob.data(), outputBlob.length());
-  client_->updateStatus(std::move(text), {media_id});
+#ifdef ENABLE_BOT
+  auto answer{connection_->post(mastodonpp::API::v1::media,
+    {{"file", std::string("@file:") + tempfile_}, {"description", text}})};
+  if (!answer)
+  {
+    if (answer.curl_error_code == 0)
+    {
+      std::cout << "HTTP status: " << answer.http_status << std::endl;
+    }
+    else
+    {
+      std::cout << "libcurl error " << std::to_string(answer.curl_error_code)
+           << ": " << answer.error_message << std::endl;
+    }
+    return;
+  }
+
+  nlohmann::json response_json = nlohmann::json::parse(answer.body);
+  answer = connection_->post(mastodonpp::API::v1::statuses,
+    {{"status", ""}, {"media_ids",
+      std::vector<std::string_view>{response_json["id"].get<std::string>()}}});
+
+  if (!answer)
+  {
+    if (answer.curl_error_code == 0)
+    {
+      std::cout << "HTTP status: " << answer.http_status << std::endl;
+    }
+    else
+    {
+      std::cout << "libcurl error " << std::to_string(answer.curl_error_code)
+           << ": " << answer.error_message << std::endl;
+    }
+  }
+#endif
 }
